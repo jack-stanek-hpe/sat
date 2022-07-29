@@ -433,9 +433,11 @@ def create_images(instance, args):
         image.public_key_id = ims_public_key_id
 
     validate_unique_image_ref_names(input_images)
+    # Validate dependencies on the full set of input images
+    find_image_dependencies(input_images)
 
     # Raises ImageCreateError if validation of IMS bases fails
-    # Do this first to provide information required to render names.
+    # Do this early to provide information required to render names.
     validate_image_ims_bases(input_images)
 
     # Raises ImageCreateError if validation of CFS configurations fails
@@ -449,9 +451,6 @@ def create_images(instance, args):
                                               args.skip_existing_images, args.dry_run)
 
     validate_no_overwritten_ims_bases(images_to_create)
-
-    # This can raise ImageCreateError for unresolvable dependencies
-    find_image_dependencies(images_to_create)
 
     images_without_dependencies = [image for image in images_to_create
                                    if not image.has_dependencies()]
