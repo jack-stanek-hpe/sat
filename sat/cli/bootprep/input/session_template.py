@@ -27,9 +27,6 @@ Defines class for session templates defined in the input file.
 from abc import abstractmethod
 import re
 
-from jinja2 import TemplateError
-from jinja2.sandbox import SecurityError
-
 from sat.apiclient import APIError
 from sat.cached_property import cached_property
 from sat.cli.bootprep.input.base import (
@@ -130,15 +127,13 @@ class InputSessionTemplate(BaseInputItem):
             raise InputItemValidateError(f'Configuration {self.configuration} specified for '
                                          f'{self} does not exist: {err}')
 
-    @Validatable.validation_method()
+    @abstractmethod
     def validate_image_exists(self, **_):
         """Validate that the image specified for this session template exists.
 
         Raises:
             InputItemValidateError: if the image cannot be verified to exist
         """
-        # Accessing the image_record finds the image from IMS
-        _ = self.image_record
 
     def get_bos_api_data(self):
         """Get the data to pass to the BOS API to create this session template.
@@ -179,6 +174,22 @@ class InputSessionTemplate(BaseInputItem):
 
 class InputSessionTemplateV1(InputSessionTemplate):
     """A BOS session template that specifies its IMS image as a simple string."""
+
+    @Validatable.validation_method()
+    def validate_image_exists(self, **_):
+        """Validate that the image specified for this session template exists.
+
+        Raises:
+            InputItemValidateError: if the image cannot be verified to exist
+        """
+        # First check if the image is being created anew by the same input file
+        input_image_names = [image.name for image in self.instance.input_images]
+        if self.image in input_image_names:
+            return
+
+        # Otherwise, accessing the image_record finds the image from IMS
+        _ = self.image_record
+
     @property
     @jinja_rendered
     def image(self):
@@ -227,11 +238,37 @@ class InputSessionTemplateV1(InputSessionTemplate):
 class InputSessionTemplateV2(InputSessionTemplate):
     """A BOS session template that specifies its IMS image as a dict."""
 
+    @Validatable.validation_method()
+    def validate_image_exists(self, **_):
+        """Validate that the image specified for this session template exists.
+
+        Raises:
+            InputItemValidateError: if the image cannot be verified to exist
+        """
+        # First check if the image is being created anew by the same input file
+        input_image_names = [image.name for image in self.instance.input_images]
+        if self.ims_image_name in input_image_names:
+            return
+        # If the 'ref_name' for this session template refers to an image in this file,
+        # then the image will exist.
+        input_image_refs = [image.ref_name for image in self.instance.input_images]
+        if self.image_ref in input_image_refs:
+            return
+
+        # Otherwise, accessing the image_record finds the image from IMS
+        _ = self.image_record
+
     @cached_property
     @jinja_rendered
     def ims_image_name(self):
         """str or None: the name specified for the ims image, or None if not specified"""
         return get_val_by_path(self.data, 'image.ims.name')
+
+    @cached_property
+    @jinja_rendered
+    def image_ref(self):
+        """str or None: the name specified for the image ref, or None if not specified"""
+        return get_val_by_path(self.data, 'image.image_ref')
 
     @property
     def ims_image_id(self):
