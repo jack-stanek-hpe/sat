@@ -28,6 +28,7 @@ import logging
 import os
 
 from cray_product_catalog.query import ProductCatalog, ProductCatalogError
+from jinja2 import StrictUndefined, UndefinedError
 from jinja2.sandbox import SandboxedEnvironment
 import yaml
 
@@ -64,6 +65,26 @@ from sat.session import SATSession
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+def undefined_base_class(args):
+    """Get a base class for the Environment's `Undefined` class"""
+    class UndefinedBase(StrictUndefined):
+        def __getattr__(self, name):
+            if self._undefined_name == 'recipe' and not args.recipe_version:
+                raise UndefinedError('--recipe-version was not specified, '
+                                     'but a "recipe" variable was referenced.')
+            else:
+                super().__getattr__(name)
+
+        def __getitem__(self, key):
+            if self._undefined_name == 'recipe' and not args.recipe_version:
+                raise UndefinedError('--recipe-version was not specified, '
+                                     'but a "recipe" variable was referenced.')
+            else:
+                super().__getitem__(key)
+
+    return UndefinedBase
 
 
 def do_bootprep_docs(args):
@@ -186,7 +207,7 @@ def do_bootprep_run(schema_validator, args):
     except VariableContextError as err:
         LOGGER.error(str(err))
         raise SystemExit(1)
-    jinja_env = SandboxedEnvironment()
+    jinja_env = SandboxedEnvironment(undefined=undefined_base_class(args))
     jinja_env.globals = var_context.vars
 
     instance = InputInstance(instance_data, cfs_client, ims_client, bos_client, jinja_env, product_catalog)
