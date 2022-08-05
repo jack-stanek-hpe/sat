@@ -113,6 +113,18 @@ class InputSessionTemplate(BaseInputItem):
 
     @cached_property
     @provides_context('image')
+    def image_instance(self):
+        input_image_matches = [image for image in self.instance.input_images
+                               if image.name == self.image]
+
+        # Validation guarantees that there will be at most one matching image
+        # instance in the input file
+        if not input_image_matches:
+            return None
+        return input_image_matches[0]
+
+    @cached_property
+    @provides_context('image')
     def image_record(self):
         """dict: the image record from IMS if one can be found"""
         try:
@@ -167,8 +179,10 @@ class InputSessionTemplate(BaseInputItem):
             InputItemValidateError: if the image cannot be verified to exist
         """
         # First check if the image is being created anew by the same input file
-        input_image_names = [image.name for image in self.instance.input_images]
-        if self.image in input_image_names:
+        # Note that this also populates the "image" variable in the Jinja
+        # context with instance data, and if that is unavailable then it will
+        # be populated with the IMS data below
+        if self.image_instance is not None:
             return
 
         # Accessing the image_record queries IMS to find the image
